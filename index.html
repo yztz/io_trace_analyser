@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trace 文件分析工具</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+    <h1>Trace 文件分析工具</h1>
+
+    <div id="drop-zone">
+        <p>将 .trace 文件拖拽到此处，或点击选择文件</p>
+        <input type="file" id="file-input" accept=".trace" style="display: none;">
+    </div>
+
+    <div id="status-message"></div>
+    <div id="p99-info" class="chart-container"></div>
+
+    <div class="charts-grid">
+        <div id="rw-count-chart" class="chart-container"></div>
+        <div id="offset-time-chart" class="chart-container"></div>
+        <div id="offset-histogram-read-chart" class="chart-container"></div> <div id="offset-histogram-write-chart" class="chart-container"></div> </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
