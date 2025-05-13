@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // ... (之前的变量声明和事件监听器保持不变) ...
     const dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('file-input');
     const statusMessage = document.getElementById('status-message');
@@ -34,7 +33,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return (bytes / MEGABYTE).toFixed(precision) + ' MB';
     }
 
-
     function initCharts() {
         if (rwCountChart) rwCountChart.dispose();
         if (offsetTimeChart) offsetTimeChart.dispose();
@@ -48,7 +46,68 @@ document.addEventListener('DOMContentLoaded', () => {
         p99InfoDiv.innerHTML = '';
     }
 
+    // --- 新增: 处理接收到 ArrayBuffer 数据的函数 ---
+    async function handleReceivedTraceData(arrayBuffer, fileName = 'received_trace.trace') {
+         statusMessage.textContent = `正在处理通过 postMessage 接收的文件: ${fileName}...`;
+         statusMessage.style.color = 'inherit';
+
+         try {
+            // 将 ArrayBuffer 转换为文本
+            const textDecoder = new TextDecoder('utf-8'); // 假设文件是UTF-8编码
+            const content = textDecoder.decode(arrayBuffer);
+
+            const traceData = parseTraceFile(content);
+            if (traceData.length === 0) {
+                statusMessage.textContent = '接收到的文件中未找到有效的 trace 数据，或数据在 #0x... 后被重置为空。';
+                statusMessage.style.color = 'orange';
+                initCharts();
+                return;
+            }
+            statusMessage.textContent = `通过 postMessage 接收文件处理完毕，共 ${traceData.length} 条记录。`;
+            analyzeAndPlotData(traceData);
+         } catch (error) {
+            console.error("处理接收到的文件时出错:", error);
+            statusMessage.textContent = `处理接收到的文件时出错: ${error.message}`;
+            statusMessage.style.color = 'red';
+            initCharts();
+         }
+    }
+
+    // --- 新增: 监听 postMessage 事件 ---
+    window.addEventListener('message', async (event) => {
+        // *** 安全检查: 仅处理来自信任源的消息 ***
+        // 将 'http://localhost:8000' 替换为你的服务器实际的源
+        // const ALLOWED_ORIGINS = ['http://localhost:8000'];
+        // if (!ALLOWED_ORIGINS.includes(event.origin)) {
+        //     console.warn(`Analyser: Received message from untrusted origin: ${event.origin}. Ignoring.`);
+        //     return;
+        // }
+
+        console.log(`Analyser: Received message from trusted origin: ${event.origin}`, event.data);
+
+        // 处理 PING/PONG 握手 (可选, 如果发送方使用)
+        if (event.data === 'PING' && event.source) {
+            console.log('Analyser: Received PING, sending PONG.');
+            event.source.postMessage('PONG', event.origin);
+            return; // PING消息处理完毕
+        }
+
+        // 检查消息是否包含我们期望的 trace 数据结构
+        // 假设发送方发送的数据格式为 { ioTrace: { buffer: ArrayBuffer, fileName: string } }
+        if (event.data && event.data.ioTrace && event.data.ioTrace.buffer instanceof ArrayBuffer) {
+             console.log('Analyser: Received valid trace data.');
+             const traceBuffer = event.data.ioTrace.buffer;
+             const traceFileName = event.data.ioTrace.fileName || 'received_trace.trace'; // 使用文件名或默认名
+             handleReceivedTraceData(traceBuffer, traceFileName); // 调用处理函数
+        } else {
+             console.warn('Analyser: Received message with unexpected data format.', event.data);
+        }
+    });
+    // --- 新增结束 ---
+
+
     // ... (dropZone and fileInput event listeners remain the same) ...
+    // 现有的 handleFile 函数用于处理文件输入和拖拽
     dropZone.addEventListener('click', () => fileInput.click());
 
     dropZone.addEventListener('dragover', (event) => {
@@ -65,17 +124,18 @@ document.addEventListener('DOMContentLoaded', () => {
         dropZone.style.backgroundColor = '#e9f5ff';
         const files = event.dataTransfer.files;
         if (files.length) {
-            handleFile(files[0]);
+            handleFile(files[0]); // 调用现有的 handleFile 处理拖拽文件
         }
     });
 
     fileInput.addEventListener('change', (event) => {
         const files = event.target.files;
         if (files.length) {
-            handleFile(files[0]);
+            handleFile(files[0]); // 调用现有的 handleFile 处理文件输入
         }
     });
 
+    // handleFile 函数保持不变，它处理的是 File 对象
     function handleFile(file) {
         if (!file.name.endsWith('.trace')) {
             statusMessage.textContent = '错误：请上传 .trace 文件。';
@@ -88,7 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
-                const content = e.target.result;
+                const content = e.target.result; // FileReader 读作文本
                 const traceData = parseTraceFile(content);
                 if (traceData.length === 0) {
                     statusMessage.textContent = '文件中未找到有效的 trace 数据，或数据在 #0x... 后被重置为空。';
@@ -113,6 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsText(file);
     }
 
+    // parseTraceFile 函数保持不变，它处理文本内容
     function parseTraceFile(content) {
         let lines = content.split('\n');
         let traceEntries = [];
@@ -156,6 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return traceEntries;
     }
 
+    // analyzeAndPlotData 函数保持不变，它处理解析后的数据数组
     function analyzeAndPlotData(data) {
         initCharts();
 
@@ -232,7 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const type = params.seriesName;
                     return `类型: ${type}<br/>
                         时间: ${(timeNs / 1e6).toFixed(3)} ms<br/>
-                        Offset: ${formatLBA(offsetLBA, 512, 2)} (LBA: ${offsetLBA})<br/> 
+                        Offset: ${formatLBA(offsetLBA, 512, 2)} (LBA: ${offsetLBA})<br/>
                         大小: ${sizeSectors} sectors (${(sizeSectors * 512 / 1024).toFixed(2)} KB)`;
                 }
             },
@@ -244,6 +306,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 containLabel: true
             },
             xAxis: {
+                nameLocation: 'middle',
+                nameGap: 26,    
                 type: 'value',
                 name: '时间 (ns)',
                 axisLabel: { formatter: val => `${(val / 1e6).toFixed(0)}ms` }
@@ -321,12 +385,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (maxOffsetLBA === 0) {
             binSizeLBA = 2048; // 1MB in LBA for 512B sectors
         } else if (maxOffsetMBValue < 100) {
+             // 至少1MB per bin, max 50 bins
             binSizeLBA = Math.max(2048, Math.ceil(maxOffsetLBA / 50 / 2048) * 2048);
         } else if (maxOffsetMBValue < 1024) {
+             // 128MB per bin
             binSizeLBA = (128 * 1024 * 1024) / 512;
         } else if (maxOffsetMBValue < 10240) {
+             // 512MB per bin
             binSizeLBA = (512 * 1024 * 1024) / 512;
         } else {
+             // 1GB per bin
             binSizeLBA = (1 * 1024 * 1024 * 1024) / 512;
         }
 
@@ -362,13 +430,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     return res;
                 }
             },
-            grid: { left: '3%', right: '4%', bottom: '10%', containLabel: true },
+            grid: { left: '3%', right: '4%', bottom: '20%', containLabel: true },
             xAxis: {
                 type: 'category',
                 data: commonXAxisDataFormatted, // 使用格式化后的X轴数据
                 name: 'Offset起始',
                 nameLocation: 'middle',
-                nameGap: 30
+                nameGap: 56,
+                axisLabel: {
+                    // interval: 0, // 强制显示所有标签
+                     rotate: 45 // 旋转标签避免重叠
+                }
             },
             yAxis: { type: 'value', name: '读IO数量' },
             series: [
@@ -377,6 +449,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     type: 'bar',
                     data: histogramReadData,
                     itemStyle: { color: '#3366CC' }
+                }
+            ],
+             dataZoom: [ // 为柱状图添加 dataZoom
+                {
+                    type: 'inside',
+                    xAxisIndex: 0,
+                    filterMode: 'none'
+                },
+                {
+                    type: 'slider',
+                    xAxisIndex: 0,
+                    filterMode: 'none',
+                    height: 20,
+                    bottom: 10
                 }
             ]
         });
@@ -397,13 +483,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     return res;
                 }
             },
-            grid: { left: '3%', right: '4%', bottom: '10%', containLabel: true },
+            grid: { left: '3%', right: '4%', bottom: '20%', containLabel: true },
             xAxis: {
                 type: 'category',
                 data: commonXAxisDataFormatted, // 使用格式化后的X轴数据
                 name: 'Offset起始',
                 nameLocation: 'middle',
-                nameGap: 30
+                nameGap: 56,
+                 axisLabel: {
+                    // interval: 0, // 强制显示所有标签
+                    rotate: 45 // 旋转标签避免重叠
+                 }
             },
             yAxis: { type: 'value', name: '写IO数量' },
             series: [
@@ -412,6 +502,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     type: 'bar',
                     data: histogramWriteData,
                     itemStyle: { color: '#DC3912' }
+                }
+            ],
+             dataZoom: [ // 为柱状图添加 dataZoom
+                {
+                    type: 'inside',
+                    xAxisIndex: 0,
+                    filterMode: 'none'
+                },
+                {
+                    type: 'slider',
+                    xAxisIndex: 0,
+                    filterMode: 'none',
+                    height: 20,
+                    bottom: 10
                 }
             ]
         });
