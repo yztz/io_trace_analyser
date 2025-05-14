@@ -34,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updatePageTitle(fileName) {
         if (fileName) {
-            document.title = `IO Trace Analyzer - ${fileName}`;
+            document.title = `File - ${fileName}`;
         } else {
             document.title = 'IO Trace Analyzer';
         }
