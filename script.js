@@ -12,7 +12,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let rwCountChart, offsetTimeChart;
     let offsetHistogramReadChart, offsetHistogramWriteChart;
 
-    // 新增：辅助函数，将LBA转换为最合适的单位 (MB, GB, TB)
     function formatLBA(lba, sectorSize = 512, precision = 1) {
         if (lba === undefined || isNaN(lba)) return 'N/A';
         const bytes = lba * sectorSize;
@@ -29,8 +28,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (Math.abs(bytes) >= GIGABYTE) {
             return (bytes / GIGABYTE).toFixed(precision) + ' GB';
         }
-        // 默认最小单位为 MB
+
         return (bytes / MEGABYTE).toFixed(precision) + ' MB';
+    }
+
+    function updatePageTitle(fileName) {
+        if (fileName) {
+            document.title = `IO Trace Analyzer - ${fileName}`;
+        } else {
+            document.title = 'IO Trace Analyzer';
+        }
     }
 
     function initCharts() {
@@ -46,7 +53,6 @@ document.addEventListener('DOMContentLoaded', () => {
         p99InfoDiv.innerHTML = '';
     }
 
-    // --- 新增: 处理接收到 ArrayBuffer 数据的函数 ---
     async function handleReceivedTraceData(arrayBuffer, fileName = 'received_trace.trace') {
          statusMessage.textContent = `正在处理通过 postMessage 接收的文件: ${fileName}...`;
          statusMessage.style.color = 'inherit';
@@ -61,15 +67,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusMessage.textContent = '接收到的文件中未找到有效的 trace 数据，或数据在 #0x... 后被重置为空。';
                 statusMessage.style.color = 'orange';
                 initCharts();
+                updatePageTitle();
                 return;
             }
             statusMessage.textContent = `通过 postMessage 接收文件处理完毕，共 ${traceData.length} 条记录。`;
             analyzeAndPlotData(traceData);
+            updatePageTitle(fileName);
          } catch (error) {
             console.error("处理接收到的文件时出错:", error);
             statusMessage.textContent = `处理接收到的文件时出错: ${error.message}`;
             statusMessage.style.color = 'red';
             initCharts();
+            updatePageTitle();
          }
     }
 
@@ -135,7 +144,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // handleFile 函数保持不变，它处理的是 File 对象
     function handleFile(file) {
         if (!file.name.endsWith('.trace')) {
             statusMessage.textContent = '错误：请上传 .trace 文件。';
@@ -154,21 +162,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     statusMessage.textContent = '文件中未找到有效的 trace 数据，或数据在 #0x... 后被重置为空。';
                     statusMessage.style.color = 'orange';
                     initCharts();
+                    updatePageTitle();
                     return;
                 }
                 statusMessage.textContent = `文件处理完毕，共 ${traceData.length} 条记录。`;
                 analyzeAndPlotData(traceData);
+                updatePageTitle(file.name);
             } catch (error) {
                 console.error("处理文件时出错:", error);
                 statusMessage.textContent = `处理文件时出错: ${error.message}`;
                 statusMessage.style.color = 'red';
                 initCharts();
+                updatePageTitle();
             }
         };
         reader.onerror = () => {
             statusMessage.textContent = '读取文件失败。';
             statusMessage.style.color = 'red';
             initCharts();
+            updatePageTitle();
         };
         reader.readAsText(file);
     }
@@ -527,4 +539,5 @@ document.addEventListener('DOMContentLoaded', () => {
             if(offsetHistogramWriteChart) offsetHistogramWriteChart.resize();
         });
     }
+    updatePageTitle();
 });
