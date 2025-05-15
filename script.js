@@ -192,13 +192,13 @@ document.addEventListener('DOMContentLoaded', () => {
         let resetOccurred = false;
         let lastResetLineIndex = -1;
 
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (line.startsWith('#0x')) {
-                lastResetLineIndex = i;
-                resetOccurred = true;
-            }
-        }
+        // for (let i = 0; i < lines.length; i++) {
+        //     const line = lines[i].trim();
+        //     if (line.startsWith('#0x')) {
+        //         lastResetLineIndex = i;
+        //         resetOccurred = true;
+        //     }
+        // }
 
         const startIndex = resetOccurred ? lastResetLineIndex + 1 : 0;
 
@@ -289,6 +289,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <h3>P99 请求间隔时间:</h3>
             <p><strong>读请求 (Read):</strong> ${p99Read}</p>
             <p><strong>写请求 (Write):</strong> ${p99Write}</p>
+            <p><small>统计包含预写</small></p>
         `;
 
         const scatterDataRead = data.filter(d => d.rwFlag === 1).map(d => [d.time, d.offset, d.size]);
