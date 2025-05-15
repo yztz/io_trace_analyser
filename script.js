@@ -289,14 +289,13 @@ document.addEventListener('DOMContentLoaded', () => {
             <h3>P99 请求间隔时间:</h3>
             <p><strong>读请求 (Read):</strong> ${p99Read}</p>
             <p><strong>写请求 (Write):</strong> ${p99Write}</p>
-            <p><small>注意: 这是请求之间的间隔时间，并非I/O延迟。</small></p>
         `;
 
         const scatterDataRead = data.filter(d => d.rwFlag === 1).map(d => [d.time, d.offset, d.size]);
         const scatterDataWrite = data.filter(d => d.rwFlag === 0).map(d => [d.time, d.offset, d.size]);
 
         offsetTimeChart.setOption({
-            title: { text: 'Offset vs. 时间散点图', left: 'center' },
+            title: { text: 'Offset vs. Time', left: 'center' },
             tooltip: {
                 trigger: 'item',
                 formatter: params => {
@@ -321,7 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 nameLocation: 'middle',
                 nameGap: 26,    
                 type: 'value',
-                name: '时间 (ns)',
+                name: 'time (ns)',
                 axisLabel: { formatter: val => `${(val / 1e6).toFixed(0)}ms` }
             },
             yAxis: {
@@ -395,21 +394,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const maxOffsetMBValue = (maxOffsetLBA * 512) / (1024 * 1024);
         let binSizeLBA;
         if (maxOffsetLBA === 0) {
-            binSizeLBA = 2048; // 1MB in LBA for 512B sectors
+            binSizeLBA = 64; // 32KB in LBA for 512B sectors (减小为原来的1/32)
         } else if (maxOffsetMBValue < 100) {
-             // 至少1MB per bin, max 50 bins
-            binSizeLBA = Math.max(2048, Math.ceil(maxOffsetLBA / 50 / 2048) * 2048);
+            // 至少32KB per bin, max 400 bins (原来是1MB，减小为1/32)
+            binSizeLBA = Math.max(64, Math.ceil(maxOffsetLBA / 400 / 64) * 64);
         } else if (maxOffsetMBValue < 1024) {
-             // 128MB per bin
-            binSizeLBA = (128 * 1024 * 1024) / 512;
+            // 4MB per bin (原来是128MB，减小为1/32)
+            binSizeLBA = (4 * 1024 * 1024) / 512;
         } else if (maxOffsetMBValue < 10240) {
-             // 512MB per bin
-            binSizeLBA = (512 * 1024 * 1024) / 512;
+            // 16MB per bin (原来是512MB，减小为1/32)
+            binSizeLBA = (16 * 1024 * 1024) / 512;
         } else {
-             // 1GB per bin
-            binSizeLBA = (1 * 1024 * 1024 * 1024) / 512;
+            // 32MB per bin (原来是1GB，减小为1/32)
+            binSizeLBA = (32 * 1024 * 1024) / 512;
         }
-
         data.forEach(entry => {
             const binStart = Math.floor(entry.offset / binSizeLBA) * binSizeLBA;
             if (!offsetCounts[binStart]) {
