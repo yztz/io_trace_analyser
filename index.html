@@ -18,10 +18,11 @@
     <div id="share-controls" style="margin-top: 15px; text-align: center;">
         <button id="share-button" style="display: none; padding: 10px 15px; font-size: 1em;">分享此 Trace</button>
     </div>
-    <div id="share-link-container" style="margin-top: 10px; display: none; padding: 10px; background-color: #f0f0f0; border-radius: 5px;">
-        <p style="margin-bottom: 5px;"><strong>分享链接 (复制):</strong></p>
-        <input type="text" id="share-link-input" readonly style="width: calc(100% - 70px); padding: 8px; border: 1px solid #ccc; border-radius: 3px; margin-right: 5px;">
-        <button id="copy-link-button" style="padding: 8px 10px;">复制</button>
+    <div id="share-link-container" style="display: none;"> <p class="share-label"><strong>分享链接 (复制):</strong></p>
+        <div class="share-input-group">
+            <input type="text" id="share-link-input" readonly>
+            <button id="copy-link-button">复制</button>
+        </div>
     </div>
     <div id="status-message"></div>
     <div id="p99-info" class="chart-container"></div>

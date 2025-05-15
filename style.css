@@ -72,3 +72,79 @@ h1 {
 #p99-info p {
     margin: 5px 0;
 }
+
+/* 主要的分享按钮 */
+#share-button {
+    padding: 10px 20px; /* 调整内边距 */
+    font-size: 1em;
+    background-color: #007bff; /* 主题蓝色，与 #drop-zone 边框一致 */
+    color: #fff; /* 白色文字 */
+    border: none;
+    border-radius: 5px; /* 与 #drop-zone 圆角一致 */
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    display: inline-block; /* 确保按钮正确显示，如果JS中已设置则忽略 */
+}
+
+#share-button:hover {
+    background-color: #0056b3; /* 鼠标悬停时深一点的蓝色 */
+}
+
+#share-button:disabled {
+    background-color: #cccccc; /* 禁用状态的颜色 */
+    color: #666666;
+    cursor: not-allowed;
+}
+
+/* 分享链接的容器 */
+#share-link-container {
+    margin-top: 20px; /* 与其他模块间距一致 */
+    padding: 15px;
+    background-color: #e9f5ff; /* 类似 #drop-zone 的背景色，或 #f9f9f9 类似 #p99-info */
+    border: 1px solid #cce5ff; /* 浅蓝色边框 */
+    border-radius: 5px;
+    /* display: none;  由 JavaScript 控制显示/隐藏 */
+}
+
+/* 分享链接容器内的标签文字 */
+#share-link-container .share-label { /* 对应HTML中新增的 class="share-label" */
+    margin: 0 0 8px 0;
+    font-weight: bold;
+    color: #0056b3; /* 深一点的蓝色，用于标签 */
+}
+
+/* 包裹输入框和复制按钮的组 (用于Flex布局) */
+.share-input-group {
+    display: flex;
+    align-items: center; /* 垂直居中对齐 */
+    gap: 10px; /* 输入框和按钮之间的间距 */
+}
+
+/* 分享链接输入框 */
+#share-link-input {
+    flex-grow: 1; /* 占据剩余空间 */
+    padding: 8px 10px;
+    font-size: 0.95em;
+    border: 1px solid #007bff; /* 蓝色边框，与主题色匹配 */
+    border-radius: 3px;
+    background-color: #fff; /* 白色背景 */
+    box-sizing: border-box; /* 确保 padding 和 border 不会增加宽度 */
+    color: #333; /* 输入框内文字颜色 */
+}
+
+/* 复制链接按钮 */
+#copy-link-button {
+    padding: 8px 15px; /* 调整内边距 */
+    font-size: 0.95em;
+    background-color: #28a745; /* 绿色，表示成功或操作 */
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    flex-shrink: 0; /* 防止按钮被压缩 */
+}
+
+#copy-link-button:hover {
+    background-color: #218838; /* 鼠标悬停时深一点的绿色 */
+}
