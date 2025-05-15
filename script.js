@@ -1,4 +1,5 @@
-document.addEventListener('DOMContentLoaded', () => {
+// script.js
+document.addEventListener('DOMContentLoaded', async () => { // 使其成为 async 函数
     const dropZone = document.getElementById('drop-zone');
     const fileInput = document.getElementById('file-input');
     const statusMessage = document.getElementById('status-message');
@@ -9,8 +10,121 @@ document.addEventListener('DOMContentLoaded', () => {
     const offsetHistogramWriteChartDiv = document.getElementById('offset-histogram-write-chart');
     const p99InfoDiv = document.getElementById('p99-info');
 
+    // 新增: 分享功能相关的 DOM 元素 (将在阶段三添加HTML)
+    const shareButton = document.getElementById('share-button');
+    const shareLinkContainer = document.getElementById('share-link-container');
+    const shareLinkInput = document.getElementById('share-link-input');
+    const copyLinkButton = document.getElementById('copy-link-button');
+
     let rwCountChart, offsetTimeChart;
     let offsetHistogramReadChart, offsetHistogramWriteChart;
+
+    let currentFileContent = null; // 用于存储当前文件的 ArrayBuffer，以便上传
+    let currentFileName = null;    // 用于存储当前文件的名称
+
+    // --- 配置: Worker URL ---
+    // 部署 Worker 后，替换为你的 Worker URL
+    const WORKER_BASE_URL = 'https://trace-worker.781089956.workers.dev';
+
+    if (shareButton) {
+        shareButton.addEventListener('click', async () => {
+            if (!currentFileContent || !currentFileName) {
+                alert('没有可分享的文件。请先加载一个 .trace 文件。');
+                return;
+            }
+
+            statusMessage.textContent = '正在准备分享链接...';
+            statusMessage.style.color = 'blue';
+            shareButton.disabled = true;
+            if (shareLinkContainer) shareLinkContainer.style.display = 'none';
+
+            try {
+                // 1. 从 Worker 获取预签名上传 URL
+                const presignResponse = await fetch(`${WORKER_BASE_URL}/generate-upload-url`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json', // 虽然没有body，但可以指定
+                        'X-Custom-Filename': currentFileName // 发送原始文件名给worker
+                    }
+                });
+
+                if (!presignResponse.ok) {
+                    const errorData = await presignResponse.json().catch(() => ({}));
+                    throw new Error(`获取上传配置失败: ${presignResponse.status} ${errorData.details || presignResponse.statusText}`);
+                }
+
+                const { uploadUrl, fileNameInBucket, publicUrl } = await presignResponse.json();
+
+                if (!uploadUrl || !publicUrl) {
+                    throw new Error('从服务器获取的上传配置无效。');
+                }
+
+                statusMessage.textContent = '正在上传文件...';
+
+                // 2. 使用预签名 URL 将文件 (ArrayBuffer) 上传到 R2
+                const uploadResponse = await fetch(uploadUrl, {
+                    method: 'PUT',
+                    body: currentFileContent,
+                    // headers: { 'Content-Type': 'application/octet-stream' } // R2通常可以推断，或根据presigned URL要求设置
+                });
+
+                if (!uploadResponse.ok) {
+                    const r2ErrorText = await uploadResponse.text().catch(() => "R2返回了错误，但无法获取详细信息。");
+                    console.error("R2 Upload Error Text:", r2ErrorText);
+                    throw new Error(`上传到 R2 失败: ${uploadResponse.status} ${uploadResponse.statusText}`);
+                }
+
+                // 3. 生成并显示分享链接
+                // 分享链接指向当前页面，并带上 R2 文件的公共 URL 作为参数
+                const currentPageUrl = new URL(window.location.href);
+                currentPageUrl.search = ''; // 清除现有参数
+                currentPageUrl.searchParams.set('traceUrl', encodeURIComponent(publicUrl));
+
+                if (shareLinkInput) shareLinkInput.value = currentPageUrl.toString();
+                if (shareLinkContainer) shareLinkContainer.style.display = 'block';
+                statusMessage.textContent = `分享链接已生成！文件: ${fileNameInBucket}`;
+                statusMessage.style.color = 'green';
+
+            } catch (error) {
+                console.error("分享操作失败:", error);
+                statusMessage.textContent = `分享失败: ${error.message}`;
+                statusMessage.style.color = 'red';
+                if (shareLinkContainer) shareLinkContainer.style.display = 'none';
+            } finally {
+                shareButton.disabled = false;
+            }
+        });
+    }
+
+    if (copyLinkButton && shareLinkInput) {
+        copyLinkButton.addEventListener('click', () => {
+            shareLinkInput.select();
+            shareLinkInput.setSelectionRange(0, 99999); // 兼容移动设备
+
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    statusMessage.textContent = '链接已复制到剪贴板!';
+                    statusMessage.style.color = 'blue';
+                } else {
+                    statusMessage.textContent = '复制失败。请手动复制。';
+                    statusMessage.style.color = 'orange';
+                }
+            } catch (err) {
+                console.warn('无法使用 execCommand 复制:', err);
+                statusMessage.textContent = '自动复制失败。请手动选择并复制。';
+                statusMessage.style.color = 'orange';
+                // 可以尝试 navigator.clipboard.writeText 作为备选，但它需要安全上下文 (HTTPS)
+                // navigator.clipboard.writeText(shareLinkInput.value).then(...);
+            }
+            setTimeout(() => {
+                // 清理提示信息，或者可以保留最后的状态
+                if (statusMessage.textContent.includes('剪贴板') || statusMessage.textContent.includes('复制失败')) {
+                    // statusMessage.textContent = ''; // 或者恢复到之前的状态
+                }
+            }, 3000);
+        });
+    }
 
     function formatLBA(lba, sectorSize = 512, precision = 1) {
         if (lba === undefined || isNaN(lba)) return 'N/A';
@@ -20,7 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const GIGABYTE = MEGABYTE * 1024;
         const TERABYTE = GIGABYTE * 1024;
 
-        if (bytes === 0) return `0.0 MB`; // 对于0，显示0.0 MB
+        if (bytes === 0) return `0.0 MB`;
 
         if (Math.abs(bytes) >= TERABYTE) {
             return (bytes / TERABYTE).toFixed(precision) + ' TB';
@@ -51,72 +165,63 @@ document.addEventListener('DOMContentLoaded', () => {
         offsetHistogramReadChart = echarts.init(offsetHistogramReadChartDiv);
         offsetHistogramWriteChart = echarts.init(offsetHistogramWriteChartDiv);
         p99InfoDiv.innerHTML = '';
+
+        // 初始化时隐藏分享按钮和链接
+        if (shareButton) shareButton.style.display = 'none';
+        if (shareLinkContainer) shareLinkContainer.style.display = 'none';
     }
 
     async function handleReceivedTraceData(arrayBuffer, fileName = 'received_trace.trace') {
-         statusMessage.textContent = `正在处理通过 postMessage 接收的文件: ${fileName}...`;
-         statusMessage.style.color = 'inherit';
+        statusMessage.textContent = `正在处理文件: ${fileName}...`;
+        statusMessage.style.color = 'inherit';
+        currentFileContent = arrayBuffer; // 存储 ArrayBuffer 用于后续上传
+        currentFileName = fileName;       // 存储文件名
 
-         try {
-            // 将 ArrayBuffer 转换为文本
-            const textDecoder = new TextDecoder('utf-8'); // 假设文件是UTF-8编码
+        try {
+            const textDecoder = new TextDecoder('utf-8');
             const content = textDecoder.decode(arrayBuffer);
 
             const traceData = parseTraceFile(content);
             if (traceData.length === 0) {
-                statusMessage.textContent = '接收到的文件中未找到有效的 trace 数据，或数据在 #0x... 后被重置为空。';
+                statusMessage.textContent = '接收到的文件中未找到有效的 trace 数据。';
                 statusMessage.style.color = 'orange';
-                initCharts();
+                initCharts(); // 这会隐藏分享按钮
                 updatePageTitle();
+                currentFileContent = null; // 清空内容
+                currentFileName = null;
                 return;
             }
-            statusMessage.textContent = `通过 postMessage 接收文件处理完毕，共 ${traceData.length} 条记录。`;
+            statusMessage.textContent = `文件处理完毕，共 ${traceData.length} 条记录。`;
             analyzeAndPlotData(traceData);
             updatePageTitle(fileName);
-         } catch (error) {
+            if (shareButton) shareButton.style.display = 'inline-block'; // 显示分享按钮
+            if (shareLinkContainer) shareLinkContainer.style.display = 'none'; // 确保旧链接隐藏
+        } catch (error) {
             console.error("处理接收到的文件时出错:", error);
             statusMessage.textContent = `处理接收到的文件时出错: ${error.message}`;
             statusMessage.style.color = 'red';
-            initCharts();
+            initCharts(); // 这会隐藏分享按钮
             updatePageTitle();
-         }
+            currentFileContent = null; // 清空内容
+            currentFileName = null;
+        }
     }
 
-    // --- 新增: 监听 postMessage 事件 ---
+    // --- 用于处理 postMessage 的函数保持不变 ---
     window.addEventListener('message', async (event) => {
-        // *** 安全检查: 仅处理来自信任源的消息 ***
-        // 将 'http://localhost:8000' 替换为你的服务器实际的源
-        // const ALLOWED_ORIGINS = ['http://localhost:8000'];
-        // if (!ALLOWED_ORIGINS.includes(event.origin)) {
-        //     console.warn(`Analyser: Received message from untrusted origin: ${event.origin}. Ignoring.`);
-        //     return;
-        // }
-
-        console.log(`Analyser: Received message from trusted origin: ${event.origin}`, event.data);
-
-        // 处理 PING/PONG 握手 (可选, 如果发送方使用)
-        if (event.data === 'PING' && event.source) {
-            console.log('Analyser: Received PING, sending PONG.');
-            event.source.postMessage('PONG', event.origin);
-            return; // PING消息处理完毕
-        }
-
-        // 检查消息是否包含我们期望的 trace 数据结构
-        // 假设发送方发送的数据格式为 { ioTrace: { buffer: ArrayBuffer, fileName: string } }
+        // ... (您现有的 postMessage 监听器代码) ...
+        // 确保它最终调用 handleReceivedTraceData(arrayBuffer, fileName)
         if (event.data && event.data.ioTrace && event.data.ioTrace.buffer instanceof ArrayBuffer) {
-             console.log('Analyser: Received valid trace data.');
-             const traceBuffer = event.data.ioTrace.buffer;
-             const traceFileName = event.data.ioTrace.fileName || 'received_trace.trace'; // 使用文件名或默认名
-             handleReceivedTraceData(traceBuffer, traceFileName); // 调用处理函数
+            console.log('Analyser: Received valid trace data via postMessage.');
+            const traceBuffer = event.data.ioTrace.buffer;
+            const traceFileName = event.data.ioTrace.fileName || 'received_trace.trace';
+            await handleReceivedTraceData(traceBuffer, traceFileName); // 使用 await
         } else {
-             console.warn('Analyser: Received message with unexpected data format.', event.data);
+            console.warn('Analyser: Received message with unexpected data format.', event.data);
         }
     });
-    // --- 新增结束 ---
 
 
-    // ... (dropZone and fileInput event listeners remain the same) ...
-    // 现有的 handleFile 函数用于处理文件输入和拖拽
     dropZone.addEventListener('click', () => fileInput.click());
 
     dropZone.addEventListener('dragover', (event) => {
@@ -133,72 +238,51 @@ document.addEventListener('DOMContentLoaded', () => {
         dropZone.style.backgroundColor = '#e9f5ff';
         const files = event.dataTransfer.files;
         if (files.length) {
-            handleFile(files[0]); // 调用现有的 handleFile 处理拖拽文件
+            handleLocalFile(files[0]); // 改为调用 handleLocalFile
         }
     });
 
     fileInput.addEventListener('change', (event) => {
         const files = event.target.files;
         if (files.length) {
-            handleFile(files[0]); // 调用现有的 handleFile 处理文件输入
+            handleLocalFile(files[0]); // 改为调用 handleLocalFile
         }
     });
 
-    function handleFile(file) {
+    // 修改原 handleFile 为 handleLocalFile，专注于本地文件处理
+    function handleLocalFile(file) {
         if (!file.name.endsWith('.trace')) {
             statusMessage.textContent = '错误：请上传 .trace 文件。';
             statusMessage.style.color = 'red';
+            initCharts(); // 这会隐藏分享按钮
+            currentFileContent = null;
+            currentFileName = null;
             return;
         }
-        statusMessage.textContent = `正在处理文件: ${file.name}...`;
+        statusMessage.textContent = `正在处理本地文件: ${file.name}...`;
         statusMessage.style.color = 'inherit';
 
         const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const content = e.target.result; // FileReader 读作文本
-                const traceData = parseTraceFile(content);
-                if (traceData.length === 0) {
-                    statusMessage.textContent = '文件中未找到有效的 trace 数据，或数据在 #0x... 后被重置为空。';
-                    statusMessage.style.color = 'orange';
-                    initCharts();
-                    updatePageTitle();
-                    return;
-                }
-                statusMessage.textContent = `文件处理完毕，共 ${traceData.length} 条记录。`;
-                analyzeAndPlotData(traceData);
-                updatePageTitle(file.name);
-            } catch (error) {
-                console.error("处理文件时出错:", error);
-                statusMessage.textContent = `处理文件时出错: ${error.message}`;
-                statusMessage.style.color = 'red';
-                initCharts();
-                updatePageTitle();
-            }
+        reader.onload = async (e) => { // 使用 async
+            // FileReader 读取的是 ArrayBuffer
+            await handleReceivedTraceData(e.target.result, file.name);
         };
         reader.onerror = () => {
             statusMessage.textContent = '读取文件失败。';
             statusMessage.style.color = 'red';
             initCharts();
             updatePageTitle();
+            currentFileContent = null;
+            currentFileName = null;
         };
-        reader.readAsText(file);
+        reader.readAsArrayBuffer(file); // 读取为 ArrayBuffer
     }
 
-    // parseTraceFile 函数保持不变，它处理文本内容
     function parseTraceFile(content) {
         let lines = content.split('\n');
         let traceEntries = [];
         let resetOccurred = false;
         let lastResetLineIndex = -1;
-
-        // for (let i = 0; i < lines.length; i++) {
-        //     const line = lines[i].trim();
-        //     if (line.startsWith('#0x')) {
-        //         lastResetLineIndex = i;
-        //         resetOccurred = true;
-        //     }
-        // }
 
         const startIndex = resetOccurred ? lastResetLineIndex + 1 : 0;
 
@@ -229,9 +313,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return traceEntries;
     }
 
-    // analyzeAndPlotData 函数保持不变，它处理解析后的数据数组
     function analyzeAndPlotData(data) {
-        initCharts();
+        // ... (您现有的 analyzeAndPlotData 函数，无需大改) ...
+        // 确保在开始时调用 initCharts() 以重置图表和分享按钮状态
+        initCharts(); // 确保图表和分享按钮被正确初始化/重置
 
         let readCount = 0;
         let writeCount = 0;
@@ -310,79 +395,30 @@ document.addEventListener('DOMContentLoaded', () => {
                         大小: ${sizeSectors} sectors (${(sizeSectors * 512 / 1024).toFixed(2)} KB)`;
                 }
             },
-            legend: { data: ['读 (Read)', '写 (Write)'], top: '30px' }, // 调整legend位置，避免与slider重叠
-            grid: { // 调整grid，为slider留出空间
-                left: '5%', // 增加左边距，为Y轴slider留空间
-                right: '8%', // 增加右边距，为Y轴slider留空间
-                bottom: '15%', // 增加下边距，为X轴slider留空间
-                containLabel: true
-            },
+            legend: { data: ['读 (Read)', '写 (Write)'], top: '30px' },
+            grid: { left: '5%', right: '8%', bottom: '15%', containLabel: true },
             xAxis: {
-                nameLocation: 'middle',
-                nameGap: 26,    
-                type: 'value',
-                name: 'time (ns)',
+                nameLocation: 'middle', nameGap: 26, type: 'value', name: 'time (ns)',
                 axisLabel: { formatter: val => `${(val / 1e6).toFixed(0)}ms` }
             },
-            yAxis: {
-                type: 'value',
-                name: 'Offset',
-                axisLabel: { formatter: val => formatLBA(val, 512, 1) }
-            },
+            yAxis: { type: 'value', name: 'Offset', axisLabel: { formatter: val => formatLBA(val, 512, 1) } },
             series: [
                 {
-                    name: '读 (Read)',
-                    type: 'scatter',
-                    symbolSize: 1, // 可以尝试减小到 2 或 1
-                    data: scatterDataRead,
-                    itemStyle: { color: '#3366CC' },
-                    // >>> 添加大数据量优化配置 <<<
-                    large: true,             // 开启大数据量优化
-                    largeThreshold: 2000,    // 数据量大于 2000 时启用 large 模式 (根据实际数据量调整)
-                    progressive: 5000,       // 开启渐进式渲染，每次渲染 5000 条数据 (根据实际情况调整)
-                    progressiveThreshold: 5000 // 数据量大于 5000 时启用渐进式渲染 (根据实际情况调整)
-                    // >>> end <<<
+                    name: '读 (Read)', type: 'scatter', symbolSize: 1, data: scatterDataRead,
+                    itemStyle: { color: '#3366CC' }, large: true, largeThreshold: 2000,
+                    progressive: 5000, progressiveThreshold: 5000
                 },
                 {
-                    name: '写 (Write)',
-                    type: 'scatter',
-                    symbolSize: 1, // 可以尝试减小到 2 或 1
-                    data: scatterDataWrite,
-                    itemStyle: { color: '#DC3912' },
-                    // >>> 添加大数据量优化配置 <<<
-                    large: true,             // 开启大数据量优化
-                    largeThreshold: 2000,    // 数据量大于 2000 时启用 large 模式 (根据实际数据量调整)
-                    progressive: 5000,       // 开启渐进式渲染，每次渲染 5000 条数据 (根据实际情况调整)
-                    progressiveThreshold: 5000 // 数据量大于 5000 时启用渐进式渲染 (根据实际情况调整)
-                    // >>> end <<<
+                    name: '写 (Write)', type: 'scatter', symbolSize: 1, data: scatterDataWrite,
+                    itemStyle: { color: '#DC3912' }, large: true, largeThreshold: 2000,
+                    progressive: 5000, progressiveThreshold: 5000
                 }
             ],
-            // 新增：DataZoom 配置，用于区域缩放
             dataZoom: [
-                {
-                    type: 'inside', // 内置型数据区域缩放组件（鼠标滚轮缩放、拖拽平移）
-                    xAxisIndex: 0,  // 控制X轴
-                    filterMode: 'empty' // 数据过滤模式，'empty'表示过滤掉范围外的数据
-                },
-                {
-                    type: 'inside', // 内置型数据区域缩放组件
-                    yAxisIndex: 0,  // 控制Y轴
-                    filterMode: 'empty'
-                },
-                {
-                    type: 'slider', // 滑动条型数据区域缩放组件
-                    xAxisIndex: 0,  // 控制X轴
-                    filterMode: 'empty',
-                    height: 20,     // Slider高度
-                    bottom: 10      // Slider离底部的距离
-                },
-                {
-                    type: 'slider', // 滑动条型数据区域缩放组件
-                    yAxisIndex: 0,  // 控制Y轴
-                    filterMode: 'empty',
-                    width: 20,      // Slider宽度
-                    right: 10       // Slider离右边的距离
-                }
+                { type: 'inside', xAxisIndex: 0, filterMode: 'empty' },
+                { type: 'inside', yAxisIndex: 0, filterMode: 'empty' },
+                { type: 'slider', xAxisIndex: 0, filterMode: 'empty', height: 20, bottom: 10 },
+                { type: 'slider', yAxisIndex: 0, filterMode: 'empty', width: 20, right: 10 }
             ]
         });
 
@@ -395,18 +431,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const maxOffsetMBValue = (maxOffsetLBA * 512) / (1024 * 1024);
         let binSizeLBA;
         if (maxOffsetLBA === 0) {
-            binSizeLBA = 64; // 32KB in LBA for 512B sectors (减小为原来的1/32)
+            binSizeLBA = 64;
         } else if (maxOffsetMBValue < 100) {
-            // 至少32KB per bin, max 400 bins (原来是1MB，减小为1/32)
             binSizeLBA = Math.max(64, Math.ceil(maxOffsetLBA / 400 / 64) * 64);
         } else if (maxOffsetMBValue < 1024) {
-            // 4MB per bin (原来是128MB，减小为1/32)
             binSizeLBA = (4 * 1024 * 1024) / 512;
         } else if (maxOffsetMBValue < 10240) {
-            // 16MB per bin (原来是512MB，减小为1/32)
             binSizeLBA = (16 * 1024 * 1024) / 512;
         } else {
-            // 32MB per bin (原来是1GB，减小为1/32)
             binSizeLBA = (32 * 1024 * 1024) / 512;
         }
         data.forEach(entry => {
@@ -421,19 +453,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const histogramCategoriesLBA = Object.keys(offsetCounts).map(Number).sort((a, b) => a - b);
         const histogramReadData = histogramCategoriesLBA.map(cat => offsetCounts[cat].read);
         const histogramWriteData = histogramCategoriesLBA.map(cat => offsetCounts[cat].write);
-
-        // X轴分类数据使用formatLBA格式化，精度为1
         const commonXAxisDataFormatted = histogramCategoriesLBA.map(lba => formatLBA(lba, 512, 1));
 
         // Read IO Offset Distribution
         offsetHistogramReadChart.setOption({
             title: { text: '读IO Offset分布', left: 'center' },
             tooltip: {
-                trigger: 'axis',
-                axisPointer: { type: 'shadow' },
+                trigger: 'axis', axisPointer: { type: 'shadow' },
                 formatter: params => {
                     const currentBinIndex = params[0].dataIndex;
-                    const currentBinLBA = histogramCategoriesLBA[currentBinIndex]; // 获取原始LBA值
+                    const currentBinLBA = histogramCategoriesLBA[currentBinIndex];
                     const binEndLBA = currentBinLBA + binSizeLBA - 1;
                     let res = `Offset Range: ${formatLBA(currentBinLBA, 512, 2)} - ${formatLBA(binEndLBA, 512, 2)}<br/>`;
                     res += `(LBA: ${currentBinLBA} - ${binEndLBA})<br/>`;
@@ -443,50 +472,24 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             grid: { left: '3%', right: '4%', bottom: '20%', containLabel: true },
             xAxis: {
-                type: 'category',
-                data: commonXAxisDataFormatted, // 使用格式化后的X轴数据
-                name: 'Offset起始',
-                nameLocation: 'middle',
-                nameGap: 56,
-                axisLabel: {
-                    // interval: 0, // 强制显示所有标签
-                     rotate: 45 // 旋转标签避免重叠
-                }
+                type: 'category', data: commonXAxisDataFormatted, name: 'Offset起始',
+                nameLocation: 'middle', nameGap: 56, axisLabel: { rotate: 45 }
             },
             yAxis: { type: 'value', name: '读IO数量' },
-            series: [
-                {
-                    name: '读IO数量',
-                    type: 'bar',
-                    data: histogramReadData,
-                    itemStyle: { color: '#3366CC' }
-                }
-            ],
-             dataZoom: [ // 为柱状图添加 dataZoom
-                {
-                    type: 'inside',
-                    xAxisIndex: 0,
-                    filterMode: 'none'
-                },
-                {
-                    type: 'slider',
-                    xAxisIndex: 0,
-                    filterMode: 'none',
-                    height: 20,
-                    bottom: 10
-                }
+            series: [{ name: '读IO数量', type: 'bar', data: histogramReadData, itemStyle: { color: '#3366CC' }}],
+            dataZoom: [
+                { type: 'inside', xAxisIndex: 0, filterMode: 'none' },
+                { type: 'slider', xAxisIndex: 0, filterMode: 'none', height: 20, bottom: 10 }
             ]
         });
 
-        // Write IO Offset Distribution
         offsetHistogramWriteChart.setOption({
             title: { text: '写IO Offset分布', left: 'center' },
             tooltip: {
-                trigger: 'axis',
-                axisPointer: { type: 'shadow' },
+                trigger: 'axis', axisPointer: { type: 'shadow' },
                 formatter: params => {
                     const currentBinIndex = params[0].dataIndex;
-                    const currentBinLBA = histogramCategoriesLBA[currentBinIndex]; // 获取原始LBA值
+                    const currentBinLBA = histogramCategoriesLBA[currentBinIndex];
                     const binEndLBA = currentBinLBA + binSizeLBA - 1;
                     let res = `Offset Range: ${formatLBA(currentBinLBA, 512, 2)} - ${formatLBA(binEndLBA, 512, 2)}<br/>`;
                     res += `(LBA: ${currentBinLBA} - ${binEndLBA})<br/>`;
@@ -496,38 +499,14 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             grid: { left: '3%', right: '4%', bottom: '20%', containLabel: true },
             xAxis: {
-                type: 'category',
-                data: commonXAxisDataFormatted, // 使用格式化后的X轴数据
-                name: 'Offset起始',
-                nameLocation: 'middle',
-                nameGap: 56,
-                 axisLabel: {
-                    // interval: 0, // 强制显示所有标签
-                    rotate: 45 // 旋转标签避免重叠
-                 }
+                type: 'category', data: commonXAxisDataFormatted, name: 'Offset起始',
+                nameLocation: 'middle', nameGap: 56, axisLabel: { rotate: 45 }
             },
             yAxis: { type: 'value', name: '写IO数量' },
-            series: [
-                {
-                    name: '写IO数量',
-                    type: 'bar',
-                    data: histogramWriteData,
-                    itemStyle: { color: '#DC3912' }
-                }
-            ],
-             dataZoom: [ // 为柱状图添加 dataZoom
-                {
-                    type: 'inside',
-                    xAxisIndex: 0,
-                    filterMode: 'none'
-                },
-                {
-                    type: 'slider',
-                    xAxisIndex: 0,
-                    filterMode: 'none',
-                    height: 20,
-                    bottom: 10
-                }
+            series: [{ name: '写IO数量', type: 'bar', data: histogramWriteData, itemStyle: { color: '#DC3912' }}],
+            dataZoom: [
+                { type: 'inside', xAxisIndex: 0, filterMode: 'none' },
+                { type: 'slider', xAxisIndex: 0, filterMode: 'none', height: 20, bottom: 10 }
             ]
         });
 
@@ -538,5 +517,65 @@ document.addEventListener('DOMContentLoaded', () => {
             if(offsetHistogramWriteChart) offsetHistogramWriteChart.resize();
         });
     }
-    updatePageTitle();
+
+
+    async function loadRemoteTrace(traceUrl) {
+        statusMessage.textContent = `正在从 URL 加载 trace 文件...`;
+        statusMessage.style.color = 'inherit';
+        if (shareButton) shareButton.style.display = 'none'; // 隐藏分享按钮直到加载完成
+        if (shareLinkContainer) shareLinkContainer.style.display = 'none';
+
+        try {
+            const response = await fetch(traceUrl);
+            if (!response.ok) {
+                throw new Error(`下载文件失败: ${response.status} ${response.statusText}`);
+            }
+            const arrayBuffer = await response.arrayBuffer();
+            let fileName = 'remote_trace.trace';
+            try {
+                const urlObj = new URL(traceUrl); // 不需要解码，fetch的URL已经是解码后的
+                const pathParts = urlObj.pathname.split('/');
+                const potentialFileName = pathParts[pathParts.length - 1];
+                if (potentialFileName && potentialFileName.endsWith('.trace')) {
+                    fileName = decodeURIComponent(potentialFileName); // 路径部分可能需要解码
+                }
+            } catch (e) {
+                console.warn("无法从URL动态解析文件名，使用默认名", e);
+            }
+
+            await handleReceivedTraceData(arrayBuffer, fileName);
+        } catch (error) {
+            console.error("加载远程 trace 文件失败:", error);
+            statusMessage.textContent = `加载远程 trace 文件失败: ${error.message}`;
+            statusMessage.style.color = 'red';
+            initCharts();
+            updatePageTitle();
+            currentFileContent = null;
+            currentFileName = null;
+        }
+    }
+
+    async function checkUrlForTrace() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const traceUrl = urlParams.get('traceUrl');
+        if (traceUrl) {
+            // traceUrl 应该是已经编码过的 R2 对象 URL
+            try {
+                // 解码以获取真实的 R2 对象 URL
+                const decodedTraceUrl = decodeURIComponent(traceUrl);
+                await loadRemoteTrace(decodedTraceUrl);
+            } catch(e) {
+                console.error("解码 traceUrl 参数失败:", e);
+                statusMessage.textContent = `加载远程 trace 失败: URL参数无效。`;
+                statusMessage.style.color = 'red';
+                updatePageTitle(); // 仍然更新标题为默认
+            }
+        } else {
+            updatePageTitle(); // 如果没有 traceUrl，正常更新标题
+        }
+    }
+
+    // 在 DOMContentLoaded 的最后调用 checkUrlForTrace
+    initCharts(); // 初始化图表和UI状态
+    await checkUrlForTrace(); // 检查 URL 参数
 });
