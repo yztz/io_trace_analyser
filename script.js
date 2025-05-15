@@ -25,6 +25,53 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
     // --- 配置: Worker URL ---
     // 部署 Worker 后，替换为你的 Worker URL
     const WORKER_BASE_URL = 'https://trace-worker.781089956.workers.dev';
+    const AUTH_KEY = '781089956abc';
+
+    async function uploadTraceFile(arrayBuffer, fileName) {
+        statusMessage.textContent = '正在准备上传文件...';
+        statusMessage.style.color = 'blue';
+        shareButton.disabled = true;
+
+        try {
+            // 直接上传文件到Worker
+            const uploadResponse = await fetch(`${WORKER_BASE_URL}/upload`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/octet-stream',
+                    'X-Custom-Auth-Key': AUTH_KEY,
+                    'X-Custom-Filename': fileName
+                },
+                body: arrayBuffer  // 直接发送ArrayBuffer
+            });
+
+            if (!uploadResponse.ok) {
+                const errorData = await uploadResponse.json().catch(() => ({}));
+                throw new Error(`上传失败: ${uploadResponse.status} ${errorData.details || uploadResponse.statusText}`);
+            }
+
+            const { shortUrl, shortKey, fileName: savedFileName } = await uploadResponse.json();
+
+            // 生成分享链接
+            // 分享链接指向当前页面，并带上短键作为参数
+            const currentPageUrl = new URL(window.location.href);
+            currentPageUrl.search = ''; // 清除现有参数
+            currentPageUrl.searchParams.set('trace', shortKey);
+
+            if (shareLinkInput) shareLinkInput.value = currentPageUrl.toString();
+            if (shareLinkContainer) shareLinkContainer.style.display = 'block';
+
+            statusMessage.textContent = `分享链接已生成！文件: ${savedFileName}`;
+            statusMessage.style.color = 'green';
+
+        } catch (error) {
+            console.error("分享操作失败:", error);
+            statusMessage.textContent = `分享失败: ${error.message}`;
+            statusMessage.style.color = 'red';
+            if (shareLinkContainer) shareLinkContainer.style.display = 'none';
+        } finally {
+            shareButton.disabled = false;
+        }
+    }
 
     if (shareButton) {
         shareButton.addEventListener('click', async () => {
@@ -33,66 +80,7 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
                 return;
             }
 
-            statusMessage.textContent = '正在准备分享链接...';
-            statusMessage.style.color = 'blue';
-            shareButton.disabled = true;
-            if (shareLinkContainer) shareLinkContainer.style.display = 'none';
-
-            try {
-                // 1. 从 Worker 获取预签名上传 URL
-                const presignResponse = await fetch(`${WORKER_BASE_URL}/generate-upload-url`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json', // 虽然没有body，但可以指定
-                        'X-Custom-Filename': currentFileName // 发送原始文件名给worker
-                    }
-                });
-
-                if (!presignResponse.ok) {
-                    const errorData = await presignResponse.json().catch(() => ({}));
-                    throw new Error(`获取上传配置失败: ${presignResponse.status} ${errorData.details || presignResponse.statusText}`);
-                }
-
-                const { uploadUrl, fileNameInBucket, publicUrl } = await presignResponse.json();
-
-                if (!uploadUrl || !publicUrl) {
-                    throw new Error('从服务器获取的上传配置无效。');
-                }
-
-                statusMessage.textContent = '正在上传文件...';
-
-                // 2. 使用预签名 URL 将文件 (ArrayBuffer) 上传到 R2
-                const uploadResponse = await fetch(uploadUrl, {
-                    method: 'PUT',
-                    body: currentFileContent,
-                    // headers: { 'Content-Type': 'application/octet-stream' } // R2通常可以推断，或根据presigned URL要求设置
-                });
-
-                if (!uploadResponse.ok) {
-                    const r2ErrorText = await uploadResponse.text().catch(() => "R2返回了错误，但无法获取详细信息。");
-                    console.error("R2 Upload Error Text:", r2ErrorText);
-                    throw new Error(`上传到 R2 失败: ${uploadResponse.status} ${uploadResponse.statusText}`);
-                }
-
-                // 3. 生成并显示分享链接
-                // 分享链接指向当前页面，并带上 R2 文件的公共 URL 作为参数
-                const currentPageUrl = new URL(window.location.href);
-                currentPageUrl.search = ''; // 清除现有参数
-                currentPageUrl.searchParams.set('traceUrl', encodeURIComponent(publicUrl));
-
-                if (shareLinkInput) shareLinkInput.value = currentPageUrl.toString();
-                if (shareLinkContainer) shareLinkContainer.style.display = 'block';
-                statusMessage.textContent = `分享链接已生成！文件: ${fileNameInBucket}`;
-                statusMessage.style.color = 'green';
-
-            } catch (error) {
-                console.error("分享操作失败:", error);
-                statusMessage.textContent = `分享失败: ${error.message}`;
-                statusMessage.style.color = 'red';
-                if (shareLinkContainer) shareLinkContainer.style.display = 'none';
-            } finally {
-                shareButton.disabled = false;
-            }
+            await uploadTraceFile(currentFileContent, currentFileName);
         });
     }
 
@@ -519,28 +507,31 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
     }
 
 
-    async function loadRemoteTrace(traceUrl) {
-        statusMessage.textContent = `正在从 URL 加载 trace 文件...`;
+    // 更新从URL加载trace文件的函数
+    async function loadRemoteTrace(shortKey) {
+        statusMessage.textContent = `正在从服务器加载 trace 文件...`;
         statusMessage.style.color = 'inherit';
         if (shareButton) shareButton.style.display = 'none'; // 隐藏分享按钮直到加载完成
         if (shareLinkContainer) shareLinkContainer.style.display = 'none';
 
         try {
-            const response = await fetch(traceUrl);
+            // 使用短键从Worker获取文件
+            const response = await fetch(`${WORKER_BASE_URL}/f/${shortKey}`);
+
             if (!response.ok) {
                 throw new Error(`下载文件失败: ${response.status} ${response.statusText}`);
             }
+
             const arrayBuffer = await response.arrayBuffer();
-            let fileName = 'remote_trace.trace';
-            try {
-                const urlObj = new URL(traceUrl); // 不需要解码，fetch的URL已经是解码后的
-                const pathParts = urlObj.pathname.split('/');
-                const potentialFileName = pathParts[pathParts.length - 1];
-                if (potentialFileName && potentialFileName.endsWith('.trace')) {
-                    fileName = decodeURIComponent(potentialFileName); // 路径部分可能需要解码
+
+            // 尝试从Content-Disposition头中获取文件名
+            let fileName = 'shared_trace.trace';
+            const contentDisposition = response.headers.get('Content-Disposition');
+            if (contentDisposition) {
+                const matches = contentDisposition.match(/filename="([^"]+)"/);
+                if (matches && matches[1]) {
+                    fileName = decodeURIComponent(matches[1]);
                 }
-            } catch (e) {
-                console.warn("无法从URL动态解析文件名，使用默认名", e);
             }
 
             await handleReceivedTraceData(arrayBuffer, fileName);
@@ -554,24 +545,13 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
             currentFileName = null;
         }
     }
-
     async function checkUrlForTrace() {
         const urlParams = new URLSearchParams(window.location.search);
-        const traceUrl = urlParams.get('traceUrl');
-        if (traceUrl) {
-            // traceUrl 应该是已经编码过的 R2 对象 URL
-            try {
-                // 解码以获取真实的 R2 对象 URL
-                const decodedTraceUrl = decodeURIComponent(traceUrl);
-                await loadRemoteTrace(decodedTraceUrl);
-            } catch(e) {
-                console.error("解码 traceUrl 参数失败:", e);
-                statusMessage.textContent = `加载远程 trace 失败: URL参数无效。`;
-                statusMessage.style.color = 'red';
-                updatePageTitle(); // 仍然更新标题为默认
-            }
+        const traceKey = urlParams.get('trace');
+        if (traceKey) {
+            await loadRemoteTrace(traceKey);
         } else {
-            updatePageTitle(); // 如果没有 traceUrl，正常更新标题
+            updatePageTitle(); // 如果没有 trace 参数，正常更新标题
         }
     }
 
