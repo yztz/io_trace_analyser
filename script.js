@@ -195,9 +195,25 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
         }
     }
 
-    // --- 用于处理 postMessage 的函数保持不变 ---
+    // 检查消息是否包含我们期望的 trace 数据结构
+    // 假设发送方发送的数据格式为 { ioTrace: { buffer: ArrayBuffer, fileName: string } }
     window.addEventListener('message', async (event) => {
-        // ... (您现有的 postMessage 监听器代码) ...
+        // *** 安全检查: 仅处理来自信任源的消息 ***
+        // 将 'http://localhost:8000' 替换为你的服务器实际的源
+        // const ALLOWED_ORIGINS = ['http://localhost:8000'];
+        // if (!ALLOWED_ORIGINS.includes(event.origin)) {
+        //     console.warn(`Analyser: Received message from untrusted origin: ${event.origin}. Ignoring.`);
+        //     return;
+        // }
+
+        console.log(`Analyser: Received message from trusted origin: ${event.origin}`, event.data);
+
+        // 处理 PING/PONG 握手 (可选, 如果发送方使用)
+        if (event.data === 'PING' && event.source) {
+            console.log('Analyser: Received PING, sending PONG.');
+            event.source.postMessage('PONG', event.origin);
+            return; // PING消息处理完毕
+        }
         // 确保它最终调用 handleReceivedTraceData(arrayBuffer, fileName)
         if (event.data && event.data.ioTrace && event.data.ioTrace.buffer instanceof ArrayBuffer) {
             console.log('Analyser: Received valid trace data via postMessage.');
@@ -302,7 +318,6 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
     }
 
     function analyzeAndPlotData(data) {
-        // ... (您现有的 analyzeAndPlotData 函数，无需大改) ...
         // 确保在开始时调用 initCharts() 以重置图表和分享按钮状态
         initCharts(); // 确保图表和分享按钮被正确初始化/重置
 
