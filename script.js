@@ -18,7 +18,6 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
     const copyLinkButton = document.getElementById('copy-link-button');
 
     const deleteButton = document.getElementById('delete-button');
-    const deleteControls = document.getElementById('delete-controls');
     const confirmDialog = document.getElementById('confirm-dialog');
     const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
     const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
@@ -165,7 +164,7 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
         if (shareButton) shareButton.style.display = 'none';
         if (shareLinkContainer) shareLinkContainer.style.display = 'none';
         if (downloadButton) downloadButton.style.display = 'none';
-        if (deleteControls) deleteControls.style.display = 'none';
+        if (deleteButton) deleteButton.style.display = 'none';
     }
 
     async function handleReceivedTraceData(arrayBuffer, fileName = 'received_trace.trace', isShared = false) {
@@ -278,7 +277,7 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
             return;
         }
 
-        if (deleteControls) deleteControls.style.display = 'none';
+        if (deleteButton) deleteButton.style.display = 'none';
         currentShortKey = null;
 
         statusMessage.textContent = `正在处理本地文件: ${file.name}...`;
@@ -587,7 +586,7 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
             }
 
             await handleReceivedTraceData(arrayBuffer, fileName, true);
-            if (deleteControls) deleteControls.style.display = 'block';
+            if (deleteButton) deleteButton.style.display = 'block';
         } catch (error) {
             console.error("加载远程 trace 文件失败:", error);
             statusMessage.textContent = `加载远程 trace 文件失败: ${error.message}`;
@@ -599,7 +598,7 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
             currentFileName = null;
             currentShortKey = null;
             
-            if (deleteControls) deleteControls.style.display = 'none';
+            if (deleteButton) deleteButton.style.display = 'none';
         }
     }
     async function checkUrlForTrace() {
@@ -641,7 +640,7 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
             currentShortKey = null;
             
             // 隐藏删除按钮
-            if (deleteControls) deleteControls.style.display = 'none';
+            if (deleteButton) deleteButton.style.display = 'none';
             
             // 可选：显示提示或重定向
             setTimeout(() => {

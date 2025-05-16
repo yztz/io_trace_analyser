@@ -39,6 +39,7 @@ h1 {
 
 #status-message {
     text-align: center;
+    margin-bottom: 10px;
     margin-bottom: 20px;
     font-style: italic;
 }
@@ -171,8 +172,6 @@ h1 {
 }
 
 .delete-btn {
-    padding: 10px 15px;
-    font-size: 1em;
     background-color: #dc3545;
     color: #fff;
     border: none;
