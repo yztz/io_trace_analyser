@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
 
     // 新增: 分享功能相关的 DOM 元素 (将在阶段三添加HTML)
     const shareButton = document.getElementById('share-button');
+    const downloadButton = document.getElementById('download-button');
     const shareLinkContainer = document.getElementById('share-link-container');
     const shareLinkInput = document.getElementById('share-link-input');
     const copyLinkButton = document.getElementById('copy-link-button');
@@ -163,6 +164,7 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
 
         if (shareButton) shareButton.style.display = 'none';
         if (shareLinkContainer) shareLinkContainer.style.display = 'none';
+        if (downloadButton) downloadButton.style.display = 'none';
         if (deleteControls) deleteControls.style.display = 'none';
     }
 
@@ -193,7 +195,9 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
             updatePageTitle(fileName);
             
             if (shareButton) shareButton.style.display = isFromShare ? 'none' : 'inline-block';
-            if (shareLinkContainer) shareLinkContainer.style.display = 'none'; // 确保旧链接隐藏
+            if (shareLinkContainer) shareLinkContainer.style.display = 'none';
+            if (downloadButton) downloadButton.style.display = 'inline-block';
+
         } catch (error) {
             console.error("处理接收到的文件时出错:", error);
             statusMessage.textContent = `处理接收到的文件时出错: ${error.message}`;
@@ -677,6 +681,32 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
         cancelDeleteBtn.addEventListener('click', () => {
             // 只隐藏对话框
             confirmDialog.style.display = 'none';
+        });
+    }
+
+    if (downloadButton) {
+        downloadButton.addEventListener('click', () => {
+            if (!currentFileContent || !currentFileName) {
+                alert('没有可下载的文件。请先加载一个 .trace 文件。');
+                return;
+            }
+
+            // 创建 Blob 对象
+            const blob = new Blob([currentFileContent], { type: 'application/octet-stream' });
+
+            // 创建下载链接
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = currentFileName.endsWith('.trace') ? currentFileName : `${currentFileName}.trace`; // 设置下载文件名
+
+            // 触发下载
+            document.body.appendChild(a);
+            a.click();
+
+            // 清理
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         });
     }
 
