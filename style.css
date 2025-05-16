@@ -132,6 +132,27 @@ h1 {
     color: #333; /* 输入框内文字颜色 */
 }
 
+#download-button {
+    padding: 10px 15px; /* 内边距 */
+    font-size: 1em; /* 字体大小 */
+    background-color: #17a2b8; /* 按钮背景颜色，可以使用与分享/删除按钮不同的颜色来区分 */
+    color: #fff; /* 文字颜色 */
+    border: none; /* 无边框 */
+    border-radius: 5px; /* 圆角 */
+    cursor: pointer; /* 鼠标悬停时显示手形光标 */
+    transition: background-color 0.3s ease; /* 背景颜色过渡效果 */
+}
+
+#download-button:hover {
+    background-color: #138496; /* 鼠标悬停时深一点的颜色 */
+}
+
+#download-button:disabled {
+    background-color: #cccccc; /* 禁用状态的颜色 */
+    color: #666666;
+    cursor: not-allowed;
+}
+
 /* 复制链接按钮 */
 #copy-link-button {
     padding: 8px 15px; /* 调整内边距 */
