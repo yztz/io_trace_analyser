@@ -159,11 +159,13 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
         if (shareLinkContainer) shareLinkContainer.style.display = 'none';
     }
 
-    async function handleReceivedTraceData(arrayBuffer, fileName = 'received_trace.trace') {
+    async function handleReceivedTraceData(arrayBuffer, fileName = 'received_trace.trace', isShared = false) {
         statusMessage.textContent = `正在处理文件: ${fileName}...`;
         statusMessage.style.color = 'inherit';
         currentFileContent = arrayBuffer; // 存储 ArrayBuffer 用于后续上传
         currentFileName = fileName;       // 存储文件名
+
+        const isFromShare = isShared;
 
         try {
             const textDecoder = new TextDecoder('utf-8');
@@ -182,7 +184,8 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
             statusMessage.textContent = `文件处理完毕，共 ${traceData.length} 条记录。`;
             analyzeAndPlotData(traceData);
             updatePageTitle(fileName);
-            if (shareButton) shareButton.style.display = 'inline-block'; // 显示分享按钮
+            
+            if (shareButton) shareButton.style.display = isFromShare ? 'none' : 'inline-block';
             if (shareLinkContainer) shareLinkContainer.style.display = 'none'; // 确保旧链接隐藏
         } catch (error) {
             console.error("处理接收到的文件时出错:", error);
@@ -524,9 +527,9 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
 
     // 更新从URL加载trace文件的函数
     async function loadRemoteTrace(shortKey) {
-        statusMessage.textContent = `正在从服务器加载 trace 文件...`;
+        statusMessage.textContent = `正在下载 trace 文件...`;
         statusMessage.style.color = 'inherit';
-        if (shareButton) shareButton.style.display = 'none'; // 隐藏分享按钮直到加载完成
+        if (shareButton) shareButton.style.display = 'none';
         if (shareLinkContainer) shareLinkContainer.style.display = 'none';
 
         try {
@@ -539,17 +542,33 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
 
             const arrayBuffer = await response.arrayBuffer();
 
-            // 尝试从Content-Disposition头中获取文件名
-            let fileName = 'shared_trace.trace';
-            const contentDisposition = response.headers.get('Content-Disposition');
-            if (contentDisposition) {
-                const matches = contentDisposition.match(/filename="([^"]+)"/);
-                if (matches && matches[1]) {
-                    fileName = decodeURIComponent(matches[1]);
+            // 首先尝试从自定义头部获取文件名
+            let fileName = response.headers.get('X-Original-Filename');
+            
+            // 如果没有自定义头部，尝试从Content-Disposition获取
+            if (!fileName) {
+                const contentDisposition = response.headers.get('Content-Disposition');
+                if (contentDisposition) {
+                    // 改进正则表达式以更可靠地提取文件名
+                    const matches = contentDisposition.match(/filename="([^"]*)"/) || 
+                                contentDisposition.match(/filename=([^;]*)/);
+                    if (matches && matches[1]) {
+                        try {
+                            fileName = decodeURIComponent(matches[1]);
+                        } catch (e) {
+                            // 如果解码失败，使用原始值
+                            fileName = matches[1];
+                        }
+                    }
                 }
             }
+            
+            // 如果仍然没有获取到文件名，使用默认名称
+            if (!fileName) {
+                fileName = 'shared_trace.trace';
+            }
 
-            await handleReceivedTraceData(arrayBuffer, fileName);
+            await handleReceivedTraceData(arrayBuffer, fileName, true);
         } catch (error) {
             console.error("加载远程 trace 文件失败:", error);
             statusMessage.textContent = `加载远程 trace 文件失败: ${error.message}`;
