@@ -586,7 +586,7 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
             }
 
             await handleReceivedTraceData(arrayBuffer, fileName, true);
-            if (deleteButton) deleteButton.style.display = 'block';
+            if (deleteButton) deleteButton.style.display = 'inline-block';
         } catch (error) {
             console.error("加载远程 trace 文件失败:", error);
             statusMessage.textContent = `加载远程 trace 文件失败: ${error.message}`;
