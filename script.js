@@ -143,7 +143,7 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
 
     function updatePageTitle(fileName) {
         if (fileName) {
-            document.title = `File - ${fileName}`;
+            document.title = `${fileName}`;
         } else {
             document.title = 'IO Trace Analyzer';
         }
@@ -184,7 +184,7 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
                 statusMessage.style.color = 'orange';
                 initCharts(); // 这会隐藏分享按钮
                 updatePageTitle();
-                currentFileContent = null; // 清空内容
+                currentFileContent = null;
                 currentFileName = null;
                 return;
             }
@@ -582,8 +582,8 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
                 fileName = 'shared_trace.trace';
             }
 
-            if (deleteControls) deleteControls.style.display = 'block';
             await handleReceivedTraceData(arrayBuffer, fileName, true);
+            if (deleteControls) deleteControls.style.display = 'block';
         } catch (error) {
             console.error("加载远程 trace 文件失败:", error);
             statusMessage.textContent = `加载远程 trace 文件失败: ${error.message}`;
