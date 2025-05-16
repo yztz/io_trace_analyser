@@ -17,6 +17,20 @@
 
     <div id="share-controls" style="margin-top: 15px; text-align: center;">
         <button id="share-button" style="display: none; padding: 10px 15px; font-size: 1em;">分享此 Trace</button>
+        <div id="delete-controls" style="display: none; margin-top: 15px; text-align: center;">
+            <button id="delete-button" class="delete-btn">删除此共享Trace</button>
+        </div>
+
+        <div id="confirm-dialog" class="modal" style="display: none;">
+            <div class="modal-content">
+                <h3>确认删除</h3>
+                <p>您确定要删除这个共享的trace文件吗？此操作不可撤销。</p>
+                <div class="modal-buttons">
+                    <button id="confirm-delete-btn">确认删除</button>
+                    <button id="cancel-delete-btn">取消</button>
+                </div>
+            </div>
+        </div>
     </div>
     <div id="share-link-container" style="display: none;"> <p class="share-label"><strong>分享链接 (复制):</strong></p>
         <div class="share-input-group">

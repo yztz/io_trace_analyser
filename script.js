@@ -16,11 +16,18 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
     const shareLinkInput = document.getElementById('share-link-input');
     const copyLinkButton = document.getElementById('copy-link-button');
 
+    const deleteButton = document.getElementById('delete-button');
+    const deleteControls = document.getElementById('delete-controls');
+    const confirmDialog = document.getElementById('confirm-dialog');
+    const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+    const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+
     let rwCountChart, offsetTimeChart;
     let offsetHistogramReadChart, offsetHistogramWriteChart;
 
     let currentFileContent = null; // 用于存储当前文件的 ArrayBuffer，以便上传
     let currentFileName = null;    // 用于存储当前文件的名称
+    let currentShortKey = null; // 存储当前文件的短键，用于删除操作
 
     // --- 配置: Worker URL ---
     // 部署 Worker 后，替换为你的 Worker URL
@@ -154,9 +161,9 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
         offsetHistogramWriteChart = echarts.init(offsetHistogramWriteChartDiv);
         p99InfoDiv.innerHTML = '';
 
-        // 初始化时隐藏分享按钮和链接
         if (shareButton) shareButton.style.display = 'none';
         if (shareLinkContainer) shareLinkContainer.style.display = 'none';
+        if (deleteControls) deleteControls.style.display = 'none';
     }
 
     async function handleReceivedTraceData(arrayBuffer, fileName = 'received_trace.trace', isShared = false) {
@@ -261,16 +268,20 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
         if (!file.name.endsWith('.trace')) {
             statusMessage.textContent = '错误：请上传 .trace 文件。';
             statusMessage.style.color = 'red';
-            initCharts(); // 这会隐藏分享按钮
+            initCharts();
             currentFileContent = null;
             currentFileName = null;
             return;
         }
+
+        if (deleteControls) deleteControls.style.display = 'none';
+        currentShortKey = null;
+
         statusMessage.textContent = `正在处理本地文件: ${file.name}...`;
         statusMessage.style.color = 'inherit';
 
         const reader = new FileReader();
-        reader.onload = async (e) => { // 使用 async
+        reader.onload = async (e) => {
             // FileReader 读取的是 ArrayBuffer
             await handleReceivedTraceData(e.target.result, file.name);
         };
@@ -281,6 +292,7 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
             updatePageTitle();
             currentFileContent = null;
             currentFileName = null;
+            currentShortKey = null;
         };
         reader.readAsArrayBuffer(file); // 读取为 ArrayBuffer
     }
@@ -532,6 +544,8 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
         if (shareButton) shareButton.style.display = 'none';
         if (shareLinkContainer) shareLinkContainer.style.display = 'none';
 
+        currentShortKey = shortKey;
+
         try {
             // 使用短键从Worker获取文件
             const response = await fetch(`${WORKER_BASE_URL}/f/${shortKey}`);
@@ -568,6 +582,7 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
                 fileName = 'shared_trace.trace';
             }
 
+            if (deleteControls) deleteControls.style.display = 'block';
             await handleReceivedTraceData(arrayBuffer, fileName, true);
         } catch (error) {
             console.error("加载远程 trace 文件失败:", error);
@@ -575,8 +590,12 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
             statusMessage.style.color = 'red';
             initCharts();
             updatePageTitle();
+            
             currentFileContent = null;
             currentFileName = null;
+            currentShortKey = null;
+            
+            if (deleteControls) deleteControls.style.display = 'none';
         }
     }
     async function checkUrlForTrace() {
@@ -589,7 +608,78 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
         }
     }
 
-    // 在 DOMContentLoaded 的最后调用 checkUrlForTrace
+    async function deleteRemoteTrace(shortKey) {
+        statusMessage.textContent = `正在删除共享文件...`;
+        statusMessage.style.color = 'blue';
+        
+        try {
+            const response = await fetch(`${WORKER_BASE_URL}/delete/${shortKey}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-Custom-Auth-Key': AUTH_KEY
+                }
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`删除失败: ${response.status} ${errorData.details || response.statusText}`);
+            }
+            
+            // 删除成功
+            statusMessage.textContent = `文件已成功删除!`;
+            statusMessage.style.color = 'green';
+            
+            // 清除图表和相关数据
+            initCharts();
+            updatePageTitle();
+            currentFileContent = null;
+            currentFileName = null;
+            currentShortKey = null;
+            
+            // 隐藏删除按钮
+            if (deleteControls) deleteControls.style.display = 'none';
+            
+            // 可选：显示提示或重定向
+            setTimeout(() => {
+                statusMessage.textContent = `文件已删除。您可以上传新的文件进行分析。`;
+            }, 3000);
+            
+        } catch (error) {
+            console.error("删除共享文件失败:", error);
+            statusMessage.textContent = `删除失败: ${error.message}`;
+            statusMessage.style.color = 'red';
+        }
+    }
+
+    if (deleteButton) {
+        deleteButton.addEventListener('click', () => {
+            if (!currentShortKey) {
+                alert('没有可删除的共享文件。');
+                return;
+            }
+            // 显示确认对话框
+            confirmDialog.style.display = 'block';
+        });
+    }
+
+    if (confirmDeleteBtn) {
+        confirmDeleteBtn.addEventListener('click', async () => {
+            // 隐藏对话框
+            confirmDialog.style.display = 'none';
+            // 执行删除操作
+            if (currentShortKey) {
+                await deleteRemoteTrace(currentShortKey);
+            }
+        });
+    }
+
+    if (cancelDeleteBtn) {
+        cancelDeleteBtn.addEventListener('click', () => {
+            // 只隐藏对话框
+            confirmDialog.style.display = 'none';
+        });
+    }
+
     initCharts(); // 初始化图表和UI状态
     await checkUrlForTrace(); // 检查 URL 参数
 });
