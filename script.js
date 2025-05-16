@@ -561,6 +561,8 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
 
             // 首先尝试从自定义头部获取文件名
             let fileName = response.headers.get('X-Original-Filename');
+            console.log(`file name from X-Original-Filename = ${fileName}`);
+            
             
             // 如果没有自定义头部，尝试从Content-Disposition获取
             if (!fileName) {
@@ -577,6 +579,7 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
                             fileName = matches[1];
                         }
                     }
+                    console.log(`file name from contentDisposition = ${fileName}`);
                 }
             }
             
