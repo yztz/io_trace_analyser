@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', async () => { // 使其成为 asyn
 
     // --- 配置: Worker URL ---
     // 部署 Worker 后，替换为你的 Worker URL
-    const WORKER_BASE_URL = 'https://trace-worker.781089956.workers.dev';
+    const WORKER_BASE_URL = 'https://trace-worker.781089956.xyz';
     const AUTH_KEY = '781089956abc';
 
     async function uploadTraceFile(arrayBuffer, fileName) {
